@@ -1,5 +1,6 @@
 package com.domloge.catholicon.catholiconmssync;
 
+import java.net.URI;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -8,7 +9,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
@@ -17,7 +17,6 @@ import java.util.regex.Pattern;
 import javax.annotation.PostConstruct;
 
 import org.apache.commons.lang3.concurrent.BasicThreadFactory;
-import org.hibernate.HibernateException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,6 +28,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
+import com.domloge.catholicon.catholiconmsmatchcard.Fixture;
 import com.domloge.catholicon.ms.common.Diff;
 import com.domloge.catholicon.ms.common.Loader;
 import com.domloge.catholicon.ms.common.ScraperException;
@@ -45,13 +45,23 @@ public class SyncSchedulingAndPersistence {
 	@Value("${DIVISION_TEAMS_URL:/Division.asp?LeagueTypeID=%d&Division=%d&Season=%d&Juniors=false&Schools=false&Website=1}")
 	private String DIVISION_TEAMS_URL;
 	
+	@Value("${FIXTURES_TEMPLATE:/fixtures/search/findByHomeTeamIdOrAwayTeamIdAndSeason?homeTeamId=%d&awayTeamId=%d&season=%d&projection=SuppressedMatchCard")
+	private String FIXTURES_TEMPLATE;
+	
+	@Value("${DELETE_FIXTURE_TEMPLATE:/fixtures/search/findByFixtureId?fixtureId=%d&projection=suppressedMatchcardProjection}")
+	private String DELETE_FIXTURE_TEMPLATE;
+	
+	@Value("${CREAT_FIXTURE_TEMPLATE:/fixtures}")
+	private URI CREATE_FIXTURE_TEMPLATE;
+	
 	public static final Pattern teamPatternExp = Pattern.compile("teamList\\[\"([0-9]+)\"\\].*clubName:\"([^\"]+)\"");
 
 	@Autowired
 	private FixtureScraper fixtureScraper;
 	
 	@Autowired
-	private FixtureRepository fixtureRepository;
+//	private FixtureRepository fixtureRepository;
+	private RestTemplate fixturesTemplate;
 	
 	@Autowired
 	private Sync<Fixture> fixtureSync;
@@ -64,12 +74,14 @@ public class SyncSchedulingAndPersistence {
 		builder.setConnectTimeout(Duration.ofSeconds(2));
 		builder.setReadTimeout(Duration.ofMillis(100));
 		this.seasonsTemplate = builder.build();
+		
+		this.fixturesTemplate = builder.build();
 	}
 
 	@PostConstruct
 	public void init() {
 		ExecutorService executorService;
-		BasicThreadFactory factory = new BasicThreadFactory.Builder().namingPattern("catholicon-ms-matchcard-initialiser-thread-%d").build();
+		BasicThreadFactory factory = new BasicThreadFactory.Builder().namingPattern("catholicon-ms-sync-initialiser-thread-%d").build();
 
 		executorService = Executors.newSingleThreadExecutor(factory);
 		executorService.execute(new Runnable() {
@@ -120,6 +132,7 @@ public class SyncSchedulingAndPersistence {
 
 	@Autowired
 	private Loader loader;
+
 	
 	@SuppressWarnings({ "rawtypes", "unchecked" })
 	private void loadTeamsForDivision(int seasonApiIdentifier, int leagueTypeId, int divisionId) throws ScraperException {
@@ -150,8 +163,9 @@ public class SyncSchedulingAndPersistence {
 			LOGGER.debug("Master fixture ID {}", masterFixture.getFixtureId());
 		}
 		
-		List<Fixture> dbFixtures = fixtureRepository.findByHomeTeamIdOrAwayTeamIdAndSeason(teamId, teamId, season);
-		LOGGER.debug("Loaded DB {} fixtures", dbFixtures.size());
+//		List<Fixture> dbFixtures = fixtureRepository.findByHomeTeamIdOrAwayTeamIdAndSeason(teamId, teamId, season);
+		Fixture[] dbFixtures = fixturesTemplate.getForEntity(String.format(FIXTURES_TEMPLATE, teamId, teamId, season), Fixture[].class).getBody();
+		LOGGER.debug("Loaded DB {} fixtures", dbFixtures.length);
 		for (Fixture dbFixture : dbFixtures) {
 			LOGGER.debug("DB fixture ID {}", dbFixture.getFixtureId());
 		}
@@ -160,28 +174,19 @@ public class SyncSchedulingAndPersistence {
 		LOGGER.debug("Compare complete");
 		
 		for (Fixture f : compare.getDelete()) {
-			try {
-				fixtureRepository.delete(f);
-			}
-			catch(HibernateException hex) {
-				LOGGER.error("failed to delete fixture "+f, hex);
-			}
+			String uri = String.format(DELETE_FIXTURE_TEMPLATE, f.getFixtureId());
+			fixturesTemplate.delete(uri);
 			LOGGER.debug("Delete {}", f);
 		}
 		
 		for (Fixture f : compare.getNewValues()) {
-			try {
-				fixtureRepository.save(f);
-			}
-			catch(HibernateException hex) {
-				LOGGER.error("failed to create fixture "+f, hex);
-			}
+			fixturesTemplate.postForEntity(CREATE_FIXTURE_TEMPLATE, f, Fixture.class);
 			LOGGER.info("Persisted {}", f);
 		}
 		
 		for (Fixture f : compare.getUpdate()) {
 			try {
-				fixtureRepository.save(f);
+				fixturesTemplate.patchForObject(CREATE_FIXTURE_TEMPLATE, f, Fixture.class);
 			}
 			catch(DataIntegrityViolationException divex) {
 				LOGGER.error("failed to update fixture "+f, divex);
@@ -201,6 +206,10 @@ public class SyncSchedulingAndPersistence {
 	}
 	
 	private Map<Integer, Fixture> mapFixtures(List<Fixture> fixtures) {
+		return mapFixtures(fixtures.toArray(new Fixture[0]));
+	}
+	
+	private Map<Integer, Fixture> mapFixtures(Fixture[] fixtures) {
 		Map<Integer, Fixture> map = new HashMap<>();
 		for (Fixture fixture : fixtures) {
 			map.put(fixture.getFixtureId(), fixture);

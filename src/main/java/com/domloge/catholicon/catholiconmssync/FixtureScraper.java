@@ -11,6 +11,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import com.domloge.catholicon.catholiconmsmatchcard.Fixture;
+import com.domloge.catholicon.catholiconmsmatchcard.Matchcard;
 import com.domloge.catholicon.ms.common.Loader;
 import com.domloge.catholicon.ms.common.ParserUtil;
 import com.domloge.catholicon.ms.common.ScraperException;
