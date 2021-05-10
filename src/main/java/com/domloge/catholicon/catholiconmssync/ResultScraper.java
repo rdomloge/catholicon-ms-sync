@@ -12,8 +12,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
-import com.domloge.catholicon.catholiconmsmatchcard.Matchcard;
-import com.domloge.catholicon.catholiconmsmatchcard.Rubber;
+import com.domloge.catholiconmsmatchcardlibrary.Fixture;
+import com.domloge.catholiconmsmatchcardlibrary.Matchcard;
+import com.domloge.catholiconmsmatchcardlibrary.MatchcardStatus;
+import com.domloge.catholiconmsmatchcardlibrary.Rubber;
 import com.domloge.catholicon.ms.common.Loader;
 import com.domloge.catholicon.ms.common.ScraperException;
 
@@ -26,15 +28,14 @@ public class ResultScraper {
 			"/MatchCard.asp?FixtureID=%1$s&Juniors=false&Schools=false&Season=0&Website=1";
 	
 	private static final String NAME_WITHHELD = "Name withheld";
-	
-	
+
 	@Autowired
 	private Loader loader;
 	
 	
-	public Matchcard loadMatchcard(int fixtureId) throws ScraperException {
+	public Matchcard loadMatchcard(Fixture f) throws ScraperException {
 		
-		String initialUrl = String.format(String.format(initialUrlTemplate, fixtureId), fixtureId);
+		String initialUrl = String.format(String.format(initialUrlTemplate, f.getExternalFixtureId()), f.getExternalFixtureId());
 		
 		String newUrl = loader.loadRedirect(initialUrl);
 		String page = loader.load(newUrl);
@@ -42,7 +43,7 @@ public class ResultScraper {
 		Document doc = Jsoup.parse(page);
 		Elements scores = doc.select("span.Boxed[id^=Score]");
 		if(scores.size() == 0) {
-			throw new ScraperException("Could not load matchcard for fixture "+fixtureId+" - no scores data in page "+newUrl);
+			throw new ScraperException("Could not load matchcard for fixture "+f.getExternalFixtureId()+" - no scores data in page "+newUrl);
 		}
 		Map<Integer, Rubber> scoreMap = new HashMap<>();
 		
@@ -100,11 +101,15 @@ public class ResultScraper {
 			int rubberNum = Integer.parseInt(rubberNumStr.substring(rubberNumStr.indexOf("Result")+6)) - 1;
 			homeTeamWins[rubberNum] = result.toLowerCase().contains("home") ? true : false;
 		}
+
+		Elements cardStatus = doc.select("input[id^=CardStatus]");
+		int cardStatusInt = Integer.parseInt(cardStatus.attr("value"));
+		MatchcardStatus status = MatchcardStatus.convert(cardStatusInt);
 		
 		Matchcard m =  new Matchcard(scoreMap, homePlayers, awayPlayers, homeTeam, awayTeam, matchDate, 
-				homeScore, awayScore, homeTeamWins, newUrl.contains("MatchCard6.asp"), fixtureId);
+				homeScore, awayScore, homeTeamWins, newUrl.contains("MatchCard6.asp"), f, status);
 		
-		LOGGER.debug("Scraped matchcard: {}", m.getFixtureId());
+		LOGGER.debug("Scraped matchcard: {} vs {} on ", m.getHomeTeamName(), m.getAwayTeamName(), m.getMatchDate());
 		
 		return m;
 	}
@@ -115,4 +120,6 @@ public class ResultScraper {
 		}
 		return empty;
 	}
+
+	
 }

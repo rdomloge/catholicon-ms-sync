@@ -23,3 +23,8 @@
 hs_err_pid*
 /bin/
 /target/
+.settings/
+.project
+.classpath
+launch.json
+settings.json

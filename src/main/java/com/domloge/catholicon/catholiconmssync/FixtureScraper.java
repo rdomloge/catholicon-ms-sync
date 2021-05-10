@@ -1,5 +1,8 @@
 package com.domloge.catholicon.catholiconmssync;
 
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -11,8 +14,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
-import com.domloge.catholicon.catholiconmsmatchcard.Fixture;
-import com.domloge.catholicon.catholiconmsmatchcard.Matchcard;
+import com.domloge.catholiconmsmatchcardlibrary.Fixture;
+import com.domloge.catholiconmsmatchcardlibrary.Matchcard;
 import com.domloge.catholicon.ms.common.Loader;
 import com.domloge.catholicon.ms.common.ParserUtil;
 import com.domloge.catholicon.ms.common.ScraperException;
@@ -57,29 +60,60 @@ public class FixtureScraper {
 				LOGGER.warn("Ignoring fixture for season {} for team {} with zero id: {}", season, teamId, fixtureJson);
 				continue;
 			}
+			
+			Fixture f = new Fixture(
+					fixtureId, 
+					convertWebDateValueToSaneValue(fixtureMap.get("matchDate")), 
+					Integer.parseInt(fixtureMap.get("homeTeamID")), 
+					Integer.parseInt(fixtureMap.get("awayTeamID")), 
+					divisionId,
+					null,
+					season);
+			
 			Matchcard matchcard = null;
 			try {
-				matchcard = resultScraper.loadMatchcard(fixtureId);
+				matchcard = resultScraper.loadMatchcard(f);
+				LOGGER.info("Successfully loaded matchcard for fixture {}", fixtureId);
+				f.setMatchCard(matchcard);
 			}
 			catch(ScraperException sex) {
 				LOGGER.debug("Could not load matchcard for fixture {} - presumably not played yet [{}]", 
 						fixtureId, sex.getMessage());
 			}
 			
-			Fixture f = new Fixture(
-					fixtureId, 
-					fixtureMap.get("matchDate"), 
-					Integer.parseInt(fixtureMap.get("homeTeamID")), 
-					Integer.parseInt(fixtureMap.get("awayTeamID")), 
-					divisionId,
-					matchcard,
-					season);
-			LOGGER.debug("Found fixture {}", f.getFixtureId());
+			LOGGER.debug("Found fixture {}", f.getId());
 			list.add(f);
 		}
 		
 		LOGGER.info("Found {} fixtures for season {} for team {}", list.size(), season, teamId);
 		return list;
+	}
+
+	public static void main(String[] aStrings) {
+		String input = "new Date(15 Oct 2019)";
+		String converted = convertWebDateValueToSaneValue(input);
+		System.out.println(converted);
+	}
+
+	private static final Pattern datePattern = Pattern.compile("new Date\\((.*)\\)");
+	private static final SimpleDateFormat inputFormat = new SimpleDateFormat("dd MMM yyyy");
+	private static final SimpleDateFormat outputFormat = new SimpleDateFormat("yyyy'-'MM'-'dd");
+	/*
+		new Date(15 Oct 2019)
+	*/
+	private static final String convertWebDateValueToSaneValue(String input) {
+		Matcher matcher = datePattern.matcher(input);
+		LOGGER.debug("Parsing '{}' - pattern matches: {}", input, matcher.matches());
+		String group =  matcher.group(1);
+		try {
+			Date date = inputFormat.parse(group);
+			LOGGER.debug("Parsed date: {}", date);
+			return outputFormat.format(date);
+		} 
+		catch (ParseException e) {
+			LOGGER.error("It seems we couldn't parse input date "+group, e);
+			return input;
+		}
 	}
 	
 }
