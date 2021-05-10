@@ -66,6 +66,9 @@ public class SyncSchedulingAndPersistence {
 
 	public static final Pattern teamPatternExp = Pattern.compile("teamList\\[\"([0-9]+)\"\\].*clubName:\"([^\"]+)\"");
 
+	@Value("${postConstructEnabled:false}")
+	private boolean postConstructEnabled;
+
 	@Autowired
 	private FixtureScraper fixtureScraper;
 
@@ -93,9 +96,16 @@ public class SyncSchedulingAndPersistence {
 		this.clubTemplate = builder.build();
 	}
 
-	@SuppressWarnings({ "unchecked", "rawtypes" })
+	@Scheduled(cron = "0 0 */12 * * *")
 	@PostConstruct
 	public void syncClubs() throws ScraperException {
+		if(postConstructEnabled) {
+			_synchClubs();
+		}
+	}
+	
+	@SuppressWarnings({ "unchecked", "rawtypes" })
+	private void _synchClubs() throws ScraperException {
 		LOGGER.info("Synching clubs");
 		Club[] dbClubs = clubTemplate.getForObject(CLUBS_SVC_BASE_URL, Club[].class);
 		LOGGER.info("Loaded {} clubs from service", dbClubs.length);
@@ -148,10 +158,16 @@ public class SyncSchedulingAndPersistence {
 		return map;
 	}
 
-	@SuppressWarnings({ "unchecked", "rawtypes" })
 	@Scheduled(cron = "0 */10 * * * *")
-	// @PostConstruct
+	@PostConstruct
 	public void syncFixtures() {
+		if(postConstructEnabled) {
+			_synchFixtures();
+		}
+	}
+	
+	@SuppressWarnings({ "unchecked", "rawtypes" })
+	private void _synchFixtures() {
 		LOGGER.info("Synching fixtures");
 		try {
 			// find all divisions
