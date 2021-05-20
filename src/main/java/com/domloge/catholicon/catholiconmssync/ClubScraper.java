@@ -1,5 +1,7 @@
 package com.domloge.catholicon.catholiconmssync;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -10,29 +12,120 @@ import com.domloge.catholicon.ms.common.Loader;
 import com.domloge.catholicon.ms.common.ScraperException;
 import com.domloge.catholiconmsclublibrary.Club;
 import com.domloge.catholiconmsclublibrary.PhoneNumber;
-import com.domloge.catholiconmsclublibrary.Session;
 import com.domloge.catholiconmsclublibrary.PhoneNumberType;
+import com.domloge.catholiconmsclublibrary.Session;
+import com.domloge.catholiconmsclublibrary.Team;
 
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 @Component
 public class ClubScraper {
-	
-	private static String seedUrl = "/ClubInfo.asp?Season=0&website=1";
 
+	private static final Logger LOGGER = LoggerFactory.getLogger(ClubScraper.class);
+
+	@Value("${CLUBS_SVC_BASE_URL:http://10.0.0.15:85/clubs}")
+	private String CLUBS_SVC_BASE_URL;
+	
+	private static String seedUrl = "/ClubInfo.asp?Season=%1$s&website=1";
 	private static String clubUrl = "/ClubInfo.asp?Club=%1$s&Season=%2$s&Juniors=false&Schools=false&Website=1";
+	// private static String teamListUrl = "/Division.asp?LeagueTypeID=%1$s&Division=%2$s&Season=%3$s&Juniors=false&Schools=false&Website=1";
+	private static final String teamsForLeagueUrl = "/LeagueRegistration.asp?Season=%1$s&website=1";
+	private static String teamDetailsUrl = "/TeamStats.asp?TeamID=%1$s&Season=%2$s&Juniors=false&Schools=false&Website=1";
+
+	private static final Pattern clubForLeaguePattern = Pattern.compile("var sortedClubList =\\s+\\[((?s).)*\\];\\s+var ");
+	private static final Pattern clubPattern = 
+		Pattern.compile("\\{clubID:(\\d+),clubInfoList.*shortName:\"(.+)\",longName:\"(.+)\",.*,sortedTeams:\\[(.*)\\].*\\}");
+	private static final Pattern teamsPattern = Pattern.compile("\\{teamID:(\\d+),leagueTypeID:(\\d+),divisionID:(\\d+),name:\"([\\w  ]+)\",websiteID:\\d\\}");
+
+	// private static final Pattern teamClubMapping = Pattern.compile("teamList\\[\"(\\d+)\"\\] = \\{teamID:\\d+,clubName:.*,clubID:(\\d+)\\};");
+	private static final Pattern teamNamePattern = Pattern.compile("teamName : \"(.*)\"");
 	
 	@Autowired
 	private Loader loader;
+
+	private Map<Integer, List<Team>> teamCache = new HashMap<>();
+
+	public void getTeamsForClub(Club c) throws ScraperException {
+		String page = loader.load(String.format(teamsForLeagueUrl, c.getSeasonId()));
+		Matcher allClubsMatcher = clubForLeaguePattern.matcher(page);
+		if( ! allClubsMatcher.find()) throw new ScraperException("Could not find clubs section");
+		Matcher clubMatcher = clubPattern.matcher(allClubsMatcher.group());
+		while(clubMatcher.find()) {
+			int clubId = Integer.parseInt(clubMatcher.group(1));
+			if(clubId != c.getClubId()) continue;
+			List<Team> teamList = new ArrayList<>();
+			String shortName = clubMatcher.group(2);
+			String longName = clubMatcher.group(3);
+			String teams = clubMatcher.group(4);
+			Matcher teamsMatcher = teamsPattern.matcher(teams);
+			while(teamsMatcher.find()) {
+				String teamIdStr = teamsMatcher.group(1);
+				String leagueTypeId = teamsMatcher.group(2);
+				String divisionId = teamsMatcher.group(3);
+				String teamName = teamsMatcher.group(4);
+				int teamId = Integer.parseInt(teamIdStr);
+				String fullTeamName = shortName + " " + teamName;
+				Team t = new Team(teamId, fullTeamName);
+				teamList.add(t);
+			}
+			c.setTeams(teamList);
+			return;
+		}
+		
+	}
+
+	// public void getTeams(int leagueId, int divisionId, int season, TeamCallback callback) throws ScraperException {
+
+	// 	String page = loader.load(String.format(teamListUrl, leagueId, divisionId, season));
+	// 	Matcher matcher = teamClubMapping.matcher(page);
+	// 	while(matcher.find()) {
+	// 		String teamIdStr = matcher.group(1);
+	// 		String clubIdStr = matcher.group(2);
+	// 		LOGGER.info("Club {} has team {}", clubIdStr, teamIdStr);
+	// 		Team team = getTeamDetails(Integer.parseInt(teamIdStr), season);
+	// 		callback.foundTeam(team, Integer.parseInt(clubIdStr), season);
+	// 	}
+	// 	// var teamList = {};
+	// 	// teamList["377"] = {teamID:377,clubName:"Andover",clubID:3};
+	// 	// teamList["395"] = {teamID:395,clubName:"Andover",clubID:3};
+	// 	// teamList["374"] = {teamID:374,clubName:"Beechdown",clubID:6};
+	// 	// teamList["380"] = {teamID:380,clubName:"Beechdown",clubID:6};
+	// 	// teamList["379"] = {teamID:379,clubName:"Phoenix",clubID:11};
+	// 	// teamList["375"] = {teamID:375,clubName:"Viking",clubID:13};
+	// 	// teamList["376"] = {teamID:376,clubName:"Waverley",clubID:14};
+	// }
+
+	private Team getTeamDetails(int teamId, int season) throws ScraperException {
+		String page = loader.load(String.format(teamDetailsUrl, teamId, season));
+		Matcher matcher = teamNamePattern.matcher(page);
+		if( ! matcher.find()) throw new ScraperException("Stats not found for team "+teamId+" in season "+season);
+		String teamName = matcher.group(1);
+		return new Team(teamId, teamName);
+		// $scope.stats = 
+		// {
+		// 	teamName : "Viking Ladies",
+		// 	lastModified : "19 Sep 2017",
+		// 	divisionName : "Division 1",
+		// 	penaltyPoints : 0,
+		// 	totalMatchPenalties : 0,
+		// 	matchesPWDL : "10 / 9 / 0 / 1",
+		// 	rubbersPWDL : "42 / 0 / 18",
+		// 	gamesWL : "91 / 42",
+		// 	gamePointsWL : "2543 / 2025"
+		// };
+	}
 	
 	
 	public List<Club> getClubIds(int seasonId) throws ScraperException {
-		String seedPage = loader.load(seedUrl);
+		String seedPage = loader.load(String.format(seedUrl, seasonId));
 		Document doc = Jsoup.parse(seedPage);
 		List<Club> clubList = new LinkedList<>();
 		
@@ -58,6 +151,7 @@ public class ClubScraper {
 		club.setClubId(clubId);
 		club.setSeasonId(seasonId);
 		fillOutClub(club);
+		getTeamsForClub(club);
 		return club;
 	}
 	
@@ -106,10 +200,6 @@ public class ClubScraper {
 		Pattern p = Pattern.compile(regex);
 		Matcher m = p.matcher(s);
 		if(m.find()) {
-//			String entry = m.group();
-//			int bracket = entry.indexOf('(');
-//			String number = entry.substring(0, bracket-1);
-//			String type = entry.substring(bracket+1, entry.indexOf(')'));
 			String number = m.group(1);
 			String type = m.group(2);
 			numbers.add(new PhoneNumber(PhoneNumberType.forIdentifier(type), number));
@@ -153,7 +243,7 @@ public class ClubScraper {
 	}
 	
 	private List<Session> parseSessions(Elements rows) {
-		LinkedList<Session> sessions = new LinkedList<>();
+		ArrayList<Session> sessions = new ArrayList<>();
 		
 		String locationName = null;
 		String locationAddr = null;
@@ -173,8 +263,8 @@ public class ClubScraper {
 			
 			if(row.select("td[align]").size() > 0) {				// session details row
 				if(row.select("td:containsOwn(As Above)").size() > 0) {
-					locationName = sessions.getLast().getLocationName();
-					locationAddr = sessions.getLast().getLocationAddr();
+					locationName = sessions.get(sessions.size()-1).getLocationName();
+					locationAddr = sessions.get(sessions.size()-1).getLocationAddr();
 				}
 				Elements sessionCells = row.select("td[align] + td");
 				days = sessionCells.get(0).childNode(0).toString();
