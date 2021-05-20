@@ -3,11 +3,9 @@ package com.domloge.catholicon.catholiconmssync;
 import java.net.URI;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -20,7 +18,6 @@ import com.domloge.catholicon.ms.common.Diff;
 import com.domloge.catholicon.ms.common.Loader;
 import com.domloge.catholicon.ms.common.ScraperException;
 import com.domloge.catholicon.ms.common.Sync;
-import com.domloge.catholiconmsclublibrary.Club;
 import com.domloge.catholiconmsmatchcardlibrary.Fixture;
 
 import org.slf4j.Logger;
@@ -55,14 +52,11 @@ public class SyncSchedulingAndPersistence {
 	@Value("${FIXTURES_TEMPLATE:/fixtures/search/findByHomeTeamIdOrAwayTeamIdAndSeason?homeTeamId=%d&awayTeamId=%d&season=%d&projection=SuppressedMatchCard}")
 	private String FIXTURES_TEMPLATE;
 
-	@Value("${DELETE_FIXTURE_TEMPLATE:/fixtures/%d}")
+	@Value("${DELETE_FIXTURE_TEMPLATE:/fixtures/%s}")
 	private String MODIFY_FIXTURE_TEMPLATE;
 
 	@Value("${CREAT_FIXTURE_TEMPLATE:/fixtures}")
 	private URI CREATE_FIXTURE_TEMPLATE;
-
-	@Value("${CLUBS_SVC_BASE_URL:http://catholicon-ms-club-service:85/clubs}")
-	private String CLUBS_SVC_BASE_URL;
 
 	public static final Pattern teamPatternExp = Pattern.compile("teamList\\[\"([0-9]+)\"\\].*clubName:\"([^\"]+)\"");
 
@@ -72,20 +66,14 @@ public class SyncSchedulingAndPersistence {
 	@Autowired
 	private FixtureScraper fixtureScraper;
 
-	@Autowired
-	private ClubScraper clubScraper;
-
 	private RestTemplate fixturesTemplate;
-
-	private RestTemplate clubTemplate;
 
 	private RestTemplate seasonsTemplate;
 
 	@Autowired
 	private Sync<Integer,Fixture> fixtureSync;
 
-	@Autowired
-	private Sync<String,Club> clubSync;
+	
 
 	public SyncSchedulingAndPersistence(@Autowired RestTemplateBuilder builder) {
 		builder.setConnectTimeout(Duration.ofSeconds(2));
@@ -93,72 +81,11 @@ public class SyncSchedulingAndPersistence {
 		
 		this.seasonsTemplate = builder.build();
 		this.fixturesTemplate = builder.build();
-		this.clubTemplate = builder.build();
+		
 	}
 
-	@Scheduled(cron = "0 0 */12 * * *")
-	@PostConstruct
-	public void syncClubs() throws ScraperException {
-		if(postConstructEnabled) {
-			_synchClubs();
-		}
-	}
-	
-	@SuppressWarnings({ "unchecked", "rawtypes" })
-	private void _synchClubs() throws ScraperException {
-		LOGGER.info("Synching clubs");
-		Club[] dbClubs = clubTemplate.getForObject(CLUBS_SVC_BASE_URL, Club[].class);
-		LOGGER.info("Loaded {} clubs from service", dbClubs.length);
-
-		CollectionModel<LinkedHashMap> seasons = seasonsTemplate
-					.getForObject(SEASONS_SVC_BASE_URL + "/seasons?sort=seasonStartYear,desc", CollectionModel.class);
-
-		Collection<LinkedHashMap> content = seasons.getContent();
-
-		List<Club> masterClubs = new LinkedList<>();
-
-		for (LinkedHashMap season : content) {
-			int seasonStartYear = Integer.parseInt(""+season.get("seasonStartYear"));
-			int seasonApiIdentifier = Integer.parseInt(""+season.get("apiIdentifier"));
-			LOGGER.info("Synching clubs for season {}", seasonStartYear);
-			List<Club> clubIds = clubScraper.getClubIds(seasonApiIdentifier);
-			LOGGER.info("Found {} clubs for season {}", clubIds.size(), seasonStartYear);
-			for (Club club : clubIds) {
-				LOGGER.debug("Fetching master data for club {} which is '{}'", club.getClubId(), club.getClubName());
-				Club masterClub = clubScraper.getClub(seasonApiIdentifier, club.getClubId());
-				masterClubs.add(masterClub);
-			}
-		}
-
-		Diff<Club> diff = clubSync.compare(mapClubsToId(masterClubs), mapClubsToId(Arrays.asList(dbClubs)));
-
-		LOGGER.info("Creating {} new clubs", diff.getNewValues().size());
-		for (Club club : diff.getNewValues()) {
-			clubTemplate.postForObject(CLUBS_SVC_BASE_URL, club, Club.class);
-		}
-
-		LOGGER.info("Updating {} clubs", diff.getUpdate().size());
-		for (Club club : diff.getUpdate()) {
-			clubTemplate.patchForObject(CLUBS_SVC_BASE_URL+"/"+club.getClubId(), club, Club.class);
-		}
-
-		LOGGER.info("Deleting {} clubs", diff.getDelete().size());
-		for (Club club : diff.getDelete()) {
-			clubTemplate.delete(CLUBS_SVC_BASE_URL+"/"+club.getClubId(), club);
-		}
-
-		LOGGER.info("Club sync complete");
-	}
-
-	private Map<String, Club> mapClubsToId(List<Club> clubs) {
-		Map<String, Club> map = new HashMap<>();
-		for (Club club : clubs) {
-			map.put("S"+club.getSeasonId()+"C"+club.getClubId(), club);
-		}
-		return map;
-	}
-
-	@Scheduled(cron = "0 */10 * * * *")
+	// @Scheduled(cron = "0 */10 * * * *")
+	@Scheduled(fixedDelay = 1000 * 60 * 10) // every 10 mins
 	@PostConstruct
 	public void syncFixtures() {
 		if(postConstructEnabled) {
@@ -197,11 +124,6 @@ public class SyncSchedulingAndPersistence {
 			Optional<Exception> optE = Optional.ofNullable(e);
 			optE.ifPresent(ex -> LOGGER.error("Failed to sync fixtures (" + ex.getClass().getName() + ")", ex));
 		}
-		// try {
-		// 	List<Fixture> load = fixtureScraper.load(375, 0);
-		// } catch (ScraperException e) {
-		// 	e.printStackTrace();
-		// }
 	}
 
 	@Autowired
@@ -227,29 +149,20 @@ public class SyncSchedulingAndPersistence {
 		LOGGER.debug("Synching fixtures for team {} for season {}", teamId, season);
 		
 		List<Fixture> masterFixtures = fixtureScraper.load(teamId, season);
-		LOGGER.debug("Scrape complete (found {} fixtures)", masterFixtures.size());
-		for (Fixture masterFixture : masterFixtures) {
-			LOGGER.debug("Master fixture ID {}", masterFixture.getId());
-		}
+		LOGGER.debug("Scrape complete (found {} *master* fixtures)", masterFixtures.size());
 		
-//		List<Fixture> dbFixtures = fixtureRepository.findByHomeTeamIdOrAwayTeamIdAndSeason(teamId, teamId, season);
-		LOGGER.debug("Calling {} with team {} and team {} and season {}", MATCHCARD_SVC_BASE_URL + FIXTURES_TEMPLATE, teamId, teamId, season);
-		
-		//Fixture[] dbFixtures = fixturesTemplate.getForEntity(
-		//	String.format(MATCHCARD_SVC_BASE_URL + FIXTURES_TEMPLATE, teamId, teamId, season), 
-		//	Fixture[].class).getBody();
-
 		ParameterizedTypeReference<CollectionModel<EntityModel<Fixture>>> param = 
-			new ParameterizedTypeReference<CollectionModel<EntityModel<Fixture>>>(){ };
+		new ParameterizedTypeReference<CollectionModel<EntityModel<Fixture>>>(){ };
+		
+		String url = String.format(MATCHCARD_SVC_BASE_URL + FIXTURES_TEMPLATE, teamId, teamId, season);
+		LOGGER.debug("Calling {}", url);
 
 		Collection<EntityModel<Fixture>> dbFixtures = fixturesTemplate.exchange(
-			String.format(MATCHCARD_SVC_BASE_URL + FIXTURES_TEMPLATE, teamId, teamId, season), 
-			HttpMethod.GET, null, param).getBody().getContent();
+				url, HttpMethod.GET, null, param)
+			.getBody().getContent();
 
-		LOGGER.debug("Loaded DB {} fixtures", dbFixtures.size());
-		for (EntityModel<Fixture> entityModel : dbFixtures) {
-			LOGGER.debug("DB fixture ID {}", entityModel.getContent().getId());
-		}
+		LOGGER.debug("Loaded {} *database* fixtures", dbFixtures.size());
+		
 		Diff<Fixture> compare = fixtureSync.compare(mapFixtures(masterFixtures), mapFixturesEm(dbFixtures));
 		
 		LOGGER.debug("Compare complete");
