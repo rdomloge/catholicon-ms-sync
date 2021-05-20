@@ -85,7 +85,7 @@ public class SyncSchedulingAndPersistence {
 	}
 
 	// @Scheduled(cron = "0 */10 * * * *")
-	@Scheduled(fixedDelay = 1000 * 60 * 10) // every 10 mins
+	@Scheduled(fixedDelay = 1000 * 60 * 30) // every 30 mins
 	@PostConstruct
 	public void syncFixtures() {
 		if(postConstructEnabled) {
@@ -168,7 +168,7 @@ public class SyncSchedulingAndPersistence {
 		LOGGER.debug("Compare complete");
 		
 		for (Fixture f : compare.getDelete()) {
-			String uri = String.format(MATCHCARD_SVC_BASE_URL + MODIFY_FIXTURE_TEMPLATE, f.getId());
+			String uri = String.format(MATCHCARD_SVC_BASE_URL + MODIFY_FIXTURE_TEMPLATE, f.getExternalFixtureId());
 			fixturesTemplate.delete(uri);
 			LOGGER.debug("Delete {}", f);
 		}
@@ -180,14 +180,14 @@ public class SyncSchedulingAndPersistence {
 		
 		for (Fixture f : compare.getUpdate()) {
 			try {
-				String fixtureUri = String.format(MATCHCARD_SVC_BASE_URL + MODIFY_FIXTURE_TEMPLATE, f.getId());
+				String fixtureUri = String.format(MATCHCARD_SVC_BASE_URL + MODIFY_FIXTURE_TEMPLATE, f.getExternalFixtureId());
 				LOGGER.debug("Patching fixture at {} with {}",  fixtureUri, f);
 				fixturesTemplate.patchForObject(fixtureUri, f, Fixture.class);				
 			}
 			catch(DataIntegrityViolationException divex) {
 				LOGGER.error("failed to update fixture "+f, divex);
 				for (EntityModel<Fixture> entityModel : dbFixtures) {
-					if(entityModel.getContent().getId() == f.getId()) {
+					if(entityModel.getContent().getExternalFixtureId() == f.getExternalFixtureId()) {
 						LOGGER.info("Found matching DB fixture {}", entityModel.getContent());
 						LOGGER.info("And here's the master fixture again {}", f);
 					}

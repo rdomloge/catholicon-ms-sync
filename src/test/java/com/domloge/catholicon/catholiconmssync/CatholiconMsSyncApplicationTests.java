@@ -22,7 +22,7 @@ class CatholiconMsSyncApplicationTests {
 	@Test
 	void fixtureSerializable() throws JsonProcessingException {
 		Fixture f = new Fixture();
-		f.setId("1");
+		f.setExternalFixtureId(1);
 		Matchcard m = new Matchcard();
 		m.setId("2");
 		// m.setFixture(f);
