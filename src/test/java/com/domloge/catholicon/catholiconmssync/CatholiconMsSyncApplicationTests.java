@@ -1,5 +1,11 @@
 package com.domloge.catholicon.catholiconmssync;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import java.time.ZonedDateTime;
+import java.time.temporal.ChronoField;
+import java.time.temporal.TemporalField;
+
 import com.domloge.catholiconmsmatchcardlibrary.Fixture;
 import com.domloge.catholiconmsmatchcardlibrary.Matchcard;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -31,4 +37,11 @@ class CatholiconMsSyncApplicationTests {
 		System.out.println("Serialised to "+new String(bytes));
 	}
 
+	@Test
+	void dateStringUtilitiesTest() {
+		DateStringUtilities util = new DateStringUtilities();
+		String input = "new Date(15 Oct 2019)";
+		ZonedDateTime date = util.convertWebDateValueToSaneValue(input);
+		assertEquals(0, date.get(ChronoField.HOUR_OF_DAY));
+	}
 }
