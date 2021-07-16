@@ -14,7 +14,6 @@ import com.domloge.catholicon.ms.common.Diff;
 import com.domloge.catholicon.ms.common.ScraperException;
 import com.domloge.catholicon.ms.common.Sync;
 import com.domloge.catholiconmsclublibrary.Club;
-import com.domloge.catholiconmsclublibrary.Team;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -115,39 +114,6 @@ public class ClubSync {
         // syncTeamsForClubs();
 		LOGGER.info("Club sync complete");
 	}
-
-	private void findTeamsForClub(Club c) {
-		// http://bdbl.org.uk/LeagueRegistration.asp?Season=2018&website=1
-		
-	}
-
-    // @SuppressWarnings({ "unchecked", "rawtypes" })
-    // private void syncTeamsForClubs() throws ScraperException {
-    //     CollectionModel<LinkedHashMap> seasons = seasonsTemplate
-	// 				.getForObject(SEASONS_SVC_BASE_URL + "/seasons?sort=seasonStartYear,desc", CollectionModel.class);
-
-    //     for (LinkedHashMap season : seasons) {
-	// 		int seasonApiIdentifier = Integer.parseInt(""+season.get("apiIdentifier"));
-    //         List<LinkedHashMap> leagues = (List<LinkedHashMap>) season.get("leagues");
-    //         for (LinkedHashMap league : leagues) {
-    //             int leagueId = Integer.parseInt(""+league.get("leagueTypeId"));
-    //             List<LinkedHashMap> divisions = (List<LinkedHashMap>) league.get("divisions");
-    //             for (LinkedHashMap division : divisions) {
-    //                 int divisionId = Integer.parseInt(""+division.get("divisionId"));
-    //                 clubScraper.getTeams(leagueId, divisionId, seasonApiIdentifier, new TeamCallback(){
-	// 					@Override
-	// 					public void foundTeam(Team t, int clubId, int season) {
-	// 						Club club = 
-	// 							clubTemplate.getForObject(CLUBS_SVC_BASE_URL+CLUB_FIND_BY_ID_SEASON_URL, Club.class, clubId, season);
-	// 						LOGGER.info("Linking team {}({}) with club {}({})", t.getTeamName(), t.getTeamId(), club.getClubName(), clubId);
-	// 						club.linkTeam(t);
-	// 						clubTemplate.patchForObject(CLUBS_SVC_BASE_URL, club, Club.class);
-	// 					}
-	// 				});
-    //             }
-    //         }
-    //     }
-    // }
 
     private Map<String, Club> mapClubsToId(List<Club> clubs) {
 		Map<String, Club> map = new HashMap<>();
