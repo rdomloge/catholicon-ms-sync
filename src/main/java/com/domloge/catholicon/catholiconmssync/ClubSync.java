@@ -34,7 +34,7 @@ public class ClubSync {
     @Value("${CLUBS_SVC_BASE_URL:http://catholicon-ms-club-service:85/clubs}")
 	private String CLUBS_SVC_BASE_URL;
 
-    @Value("${SEASONS_SVC_BASE_URL:http://catholicon-ms-season-service:81}")
+    @Value("${SEASONS_SVC_BASE_URL:http://catholicon-ms-seasons-service:81}")
 	private String SEASONS_SVC_BASE_URL;
 
 	@Value("${CLUB_FIND_BY_ID_SEASON_URL:/search/findClubByClubIdAndSeasonId?clubId={clubId}&season={season}}")

@@ -248,7 +248,7 @@ public class ClubScraper {
 		String locationName = null;
 		String locationAddr = null;
 		String days = null;
-		String numCourts = null;
+		int numCourts = -1;
 		String start = null;
 		String end = null;
 		
@@ -268,7 +268,7 @@ public class ClubScraper {
 				}
 				Elements sessionCells = row.select("td[align] + td");
 				days = sessionCells.get(0).childNode(0).toString();
-				numCourts = sessionCells.get(0).childNode(2).toString();
+				numCourts = Integer.parseInt(sessionCells.get(0).childNode(2).toString());
 				start = sessionCells.get(1).childNode(0).toString();
 				end = sessionCells.get(1).childNode(2).toString();
 				
@@ -276,7 +276,7 @@ public class ClubScraper {
 				locationName = null;
 				locationAddr = null;
 				days = null;
-				numCourts = null;
+				numCourts = -1;
 				start = null;
 				end = null;
 			}
