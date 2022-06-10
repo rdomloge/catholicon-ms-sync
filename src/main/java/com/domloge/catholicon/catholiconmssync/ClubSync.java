@@ -60,7 +60,6 @@ public class ClubSync {
         this.seasonsTemplate = builder.build();
     }
 
-    @Scheduled(cron = "0 0 */12 * * *")
 	@PostConstruct
 	public void syncClubs() throws ScraperException {
 		if(postConstructEnabled) {
@@ -68,6 +67,7 @@ public class ClubSync {
 		}
 	}
 	
+	@Scheduled(cron = "0 0 */12 * * *")
 	@SuppressWarnings({ "unchecked", "rawtypes" })
 	private void _synchClubs() throws ScraperException {
 		LOGGER.info("Synching clubs");
@@ -84,7 +84,7 @@ public class ClubSync {
 		for (LinkedHashMap season : content) {
 			int seasonStartYear = Integer.parseInt(""+season.get("seasonStartYear"));
 			int seasonApiIdentifier = Integer.parseInt(""+season.get("apiIdentifier"));
-			LOGGER.info("Synching clubs for season {}", seasonStartYear);
+			LOGGER.debug("Synching clubs for season {}", seasonStartYear);
 			List<Club> clubIds = clubScraper.getClubIds(seasonApiIdentifier);
 			LOGGER.info("Found {} clubs for season {}", clubIds.size(), seasonStartYear);
 			for (Club club : clubIds) {

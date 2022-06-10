@@ -85,7 +85,6 @@ public class SyncSchedulingAndPersistence {
 	}
 
 	// @Scheduled(cron = "0 */10 * * * *")
-	@Scheduled(fixedDelay = 1000 * 60 * 30) // every 30 mins
 	@PostConstruct
 	public void syncFixtures() {
 		if(postConstructEnabled) {
@@ -93,6 +92,7 @@ public class SyncSchedulingAndPersistence {
 		}
 	}
 	
+	@Scheduled(fixedDelay = 1000 * 60 * 30) // every 30 mins
 	@SuppressWarnings({ "unchecked", "rawtypes" })
 	private void _synchFixtures() {
 		LOGGER.info("Synching fixtures");
@@ -140,7 +140,7 @@ public class SyncSchedulingAndPersistence {
 		while (m.find()) {
 			String teamId = m.group(1);
 			String teamName = m.group(2);
-				LOGGER.info("Synching devision for team {}({}), for season {}", teamName, teamId, seasonApiIdentifier);
+			LOGGER.info("Synching devision for team {}({}), for season {}", teamName, teamId, seasonApiIdentifier);
 			syncDivision(Integer.parseInt(teamId), seasonApiIdentifier);
 		}
 	}
@@ -152,7 +152,7 @@ public class SyncSchedulingAndPersistence {
 		LOGGER.debug("Scrape complete (found {} *master* fixtures)", masterFixtures.size());
 		
 		ParameterizedTypeReference<CollectionModel<EntityModel<Fixture>>> param = 
-		new ParameterizedTypeReference<CollectionModel<EntityModel<Fixture>>>(){ };
+			new ParameterizedTypeReference<CollectionModel<EntityModel<Fixture>>>(){ };
 		
 		String url = String.format(MATCHCARD_SVC_BASE_URL + FIXTURES_TEMPLATE, teamId, teamId, season);
 		LOGGER.debug("Calling {}", url);
