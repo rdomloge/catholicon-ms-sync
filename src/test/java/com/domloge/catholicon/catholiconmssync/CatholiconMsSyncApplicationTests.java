@@ -32,7 +32,7 @@ class CatholiconMsSyncApplicationTests {
 		Matchcard m = new Matchcard();
 		m.setId("2");
 		// m.setFixture(f);
-		f.setMatchCard(m);
+		f.setMatchcard(m);
 		byte[] bytes = mapper.writeValueAsBytes(f);
 		System.out.println("Serialised to "+new String(bytes));
 	}

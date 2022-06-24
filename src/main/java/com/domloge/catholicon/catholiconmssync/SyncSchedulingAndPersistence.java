@@ -1,5 +1,6 @@
 package com.domloge.catholicon.catholiconmssync;
 
+import java.lang.reflect.InvocationTargetException;
 import java.net.URI;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -18,10 +19,12 @@ import com.domloge.catholicon.ms.common.Diff;
 import com.domloge.catholicon.ms.common.Loader;
 import com.domloge.catholicon.ms.common.ScraperException;
 import com.domloge.catholicon.ms.common.Sync;
+import com.domloge.catholicon.ms.common.Tuple;
 import com.domloge.catholiconmsmatchcardlibrary.Fixture;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.client.RestTemplateBuilder;
@@ -81,10 +84,8 @@ public class SyncSchedulingAndPersistence {
 		
 		this.seasonsTemplate = builder.build();
 		this.fixturesTemplate = builder.build();
-		
 	}
 
-	// @Scheduled(cron = "0 */10 * * * *")
 	@PostConstruct
 	public void syncFixtures() {
 		if(postConstructEnabled) {
@@ -135,7 +136,6 @@ public class SyncSchedulingAndPersistence {
 		String url = String.format(DIVISION_TEAMS_URL, leagueTypeId, divisionId, seasonApiIdentifier);
 
 		String page = loader.load(url);
-		// teamList["377"] = {teamID:377,clubName:"Andover",clubID:3};
 		Matcher m = teamPatternExp.matcher(page);
 		while (m.find()) {
 			String teamId = m.group(1);
@@ -164,8 +164,8 @@ public class SyncSchedulingAndPersistence {
 		LOGGER.debug("Loaded {} *database* fixtures", dbFixtures.size());
 		
 		Diff<Fixture> compare = fixtureSync.compare(mapFixtures(masterFixtures), mapFixturesEm(dbFixtures));
+		LOGGER.info("Diff contains {} new, {} removed and {} updated", compare.getNewValues().size(), compare.getDelete().size(), compare.getUpdate().size());
 		
-		LOGGER.debug("Compare complete");
 		
 		for (Fixture f : compare.getDelete()) {
 			String uri = String.format(MATCHCARD_SVC_BASE_URL + MODIFY_FIXTURE_TEMPLATE, f.getExternalFixtureId());
@@ -178,16 +178,17 @@ public class SyncSchedulingAndPersistence {
 			LOGGER.info("Persisted new fixture {}", response.getBody());
 		}
 		
-		for (Fixture f : compare.getUpdate()) {
+		for (Tuple<Fixture,Fixture> f : compare.getUpdate()) {
+			BeanUtils.copyProperties(f.master, f.db, "id, externalId");
 			try {
-				String fixtureUri = String.format(MATCHCARD_SVC_BASE_URL + MODIFY_FIXTURE_TEMPLATE, f.getExternalFixtureId());
-				LOGGER.debug("Patching fixture at {} with {}",  fixtureUri, f);
-				fixturesTemplate.patchForObject(fixtureUri, f, Fixture.class);				
+				String fixtureUri = String.format(MATCHCARD_SVC_BASE_URL + MODIFY_FIXTURE_TEMPLATE, f.db.getExternalFixtureId());
+				LOGGER.debug("Patching fixture at {} with {}",  fixtureUri, f.db);
+				fixturesTemplate.patchForObject(fixtureUri, f.db, Fixture.class);	
 			}
 			catch(DataIntegrityViolationException divex) {
 				LOGGER.error("failed to update fixture "+f, divex);
 				for (EntityModel<Fixture> entityModel : dbFixtures) {
-					if(entityModel.getContent().getExternalFixtureId() == f.getExternalFixtureId()) {
+					if(entityModel.getContent().getExternalFixtureId() == f.db.getExternalFixtureId()) {
 						LOGGER.info("Found matching DB fixture {}", entityModel.getContent());
 						LOGGER.info("And here's the master fixture again {}", f);
 					}
@@ -196,9 +197,7 @@ public class SyncSchedulingAndPersistence {
 			}
 			LOGGER.debug("Update {}", f);
 		}
-		
 		LOGGER.info("Synch complete");
-		
 	}
 	
 	private Map<Integer, Fixture> mapFixtures(List<Fixture> fixtures) {

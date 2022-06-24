@@ -103,7 +103,7 @@ public class FixtureScraper {
 			try {
 				matchcard = resultScraper.loadMatchcard(f);
 				LOGGER.info("Successfully loaded matchcard for fixture {}", fixtureId);
-				f.setMatchCard(matchcard);
+				f.setMatchcard(matchcard);
 			}
 			catch(ScraperException sex) {
 				LOGGER.debug("Could not load matchcard for fixture {} - presumably not played yet [{}]", 

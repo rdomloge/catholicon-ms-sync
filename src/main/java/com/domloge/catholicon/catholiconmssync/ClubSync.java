@@ -1,5 +1,6 @@
 package com.domloge.catholicon.catholiconmssync;
 
+import java.lang.reflect.InvocationTargetException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
@@ -13,10 +14,12 @@ import javax.annotation.PostConstruct;
 import com.domloge.catholicon.ms.common.Diff;
 import com.domloge.catholicon.ms.common.ScraperException;
 import com.domloge.catholicon.ms.common.Sync;
+import com.domloge.catholicon.ms.common.Tuple;
 import com.domloge.catholiconmsclublibrary.Club;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.client.RestTemplateBuilder;
@@ -102,8 +105,9 @@ public class ClubSync {
 		}
 
 		LOGGER.info("Updating {} clubs", diff.getUpdate().size());
-		for (Club club : diff.getUpdate()) {
-			clubTemplate.patchForObject(CLUBS_SVC_BASE_URL, club, Club.class);
+		for (Tuple<Club, Club> club : diff.getUpdate()) {
+			BeanUtils.copyProperties(club.master, club.db, "id, externalId");
+			clubTemplate.patchForObject(CLUBS_SVC_BASE_URL, club.db, Club.class);
 		}
 
 		LOGGER.info("Deleting {} clubs", diff.getDelete().size());
